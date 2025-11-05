@@ -67,12 +67,18 @@ function loadChoirGroups() {
   };
 }
 
+// Get today's date
 const today = new Date().toISOString().split("T")[0];
 document.getElementById("todayDate").textContent = today;
 
+// Key for today's attendance storage
+const STORAGE_KEY = `attendance_${today}`;
 const choirGroups = loadChoirGroups();
 const container = document.getElementById("attendance-container");
 let globalIndex = 1;
+
+// Load saved attendance for today (if any)
+const savedAttendance = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
 
 for (const [section, members] of Object.entries(choirGroups)) {
   const h2 = document.createElement("h2");
@@ -86,11 +92,15 @@ for (const [section, members] of Object.entries(choirGroups)) {
   const tbody = table.querySelector("tbody");
 
   members.forEach(name => {
+    const id = `${section}_${name}`.replace(/\s+/g, "_");
     const row = document.createElement("tr");
+    const presentChecked = savedAttendance[id] === "present";
+    const apologyChecked = savedAttendance[id] === "apology";
+
     row.innerHTML = `
       <td>${globalIndex}. ${name}</td>
-      <td><input type="checkbox" id="present-${globalIndex}" onchange="toggleCheck(${globalIndex}, 'present')"></td>
-      <td><input type="checkbox" id="apology-${globalIndex}" onchange="toggleCheck(${globalIndex}, 'apology')"></td>`;
+      <td><input type="checkbox" id="present-${id}" ${presentChecked ? "checked" : ""} onchange="toggleCheck('${id}', 'present')"></td>
+      <td><input type="checkbox" id="apology-${id}" ${apologyChecked ? "checked" : ""} onchange="toggleCheck('${id}', 'apology')"></td>`;
     tbody.appendChild(row);
     globalIndex++;
   });
@@ -98,29 +108,39 @@ for (const [section, members] of Object.entries(choirGroups)) {
   container.appendChild(table);
 }
 
-function toggleCheck(i, type) {
-  if (type === 'present')
-    document.getElementById(`apology-${i}`).checked = false;
-  else
-    document.getElementById(`present-${i}`).checked = false;
+function toggleCheck(id, type) {
+  const presentBox = document.getElementById(`present-${id}`);
+  const apologyBox = document.getElementById(`apology-${id}`);
+
+  if (type === 'present') {
+    apologyBox.checked = false;
+    saveState(id, presentBox.checked ? "present" : "absent");
+  } else {
+    presentBox.checked = false;
+    saveState(id, apologyBox.checked ? "apology" : "absent");
+  }
+}
+
+function saveState(id, status) {
+  const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  if (status === "absent") delete data[id];
+  else data[id] = status;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function generateReport() {
   let report = `Choir Attendance (${today})\n`;
-  let totalIndex = 1;
   let apologyList = [];
   let attendanceData = [];
+  const data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
 
   for (const [section, members] of Object.entries(choirGroups)) {
     report += `\n${section}\n`;
     let sectionCount = 1;
 
     members.forEach(name => {
-      const present = document.getElementById(`present-${totalIndex}`).checked;
-      const apology = document.getElementById(`apology-${totalIndex}`).checked;
-      let status = "absent";
-      if (present) status = "present";
-      else if (apology) status = "apology";
+      const id = `${section}_${name}`.replace(/\s+/g, "_");
+      const status = data[id] || "absent";
 
       attendanceData.push({ section, name, status });
 
@@ -130,7 +150,6 @@ function generateReport() {
       } else if (status === "apology") {
         apologyList.push(name);
       }
-      totalIndex++;
     });
   }
 
@@ -140,7 +159,7 @@ function generateReport() {
   document.getElementById("report").textContent = report;
   document.getElementById("copyBtn").style.display = "block";
 
-  saveAttendance(today, attendanceData); // ✅ Automatically save when generating
+  saveAttendance(today, attendanceData); // Save remotely too
 }
 
 function copyReport() {
@@ -151,9 +170,7 @@ function copyReport() {
     navigator.clipboard.writeText(text).then(() => {
       btn.textContent = "✅ Copied!";
       setTimeout(() => btn.textContent = "📋 Copy Report", 2000);
-    }).catch(err => {
-      alert("Clipboard error: " + err);
-    });
+    }).catch(err => alert("Clipboard error: " + err));
   } else {
     const textarea = document.createElement("textarea");
     textarea.value = text;
@@ -176,6 +193,12 @@ async function saveAttendance(date, records) {
   const result = await res.json();
   console.log("Saved to Google Sheets:", result);
 }
+
+// ✅ Optional: clear old records (previous dates) automatically
+Object.keys(localStorage).forEach(k => {
+  if (k.startsWith("attendance_") && k !== STORAGE_KEY) localStorage.removeItem(k);
+});
 </script>
+
 </body>
 </html>
