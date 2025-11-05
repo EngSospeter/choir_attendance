@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+<!DOCTYPE html> 
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="manifest.json"> 
+<link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.jpg" type="image/jpeg">
 <meta name="theme-color" content="#0b5ed7">
 <script>
@@ -46,7 +46,7 @@
 <div id="attendance-container"></div>
 
 <div style="text-align:center;">
-  <button id="generateBtn">Generate & Save Report</button>
+  <button onclick="generateReport()">Generate & Save Report</button>
   <button onclick="location.href='summary.html'">📊 View Summary</button>
   <button onclick="location.href='edit_members.html'">✏️ Edit Members</button>
 </div>
@@ -56,63 +56,48 @@
 <button id="copyBtn" style="display:none;" onclick="copyReport()">📋 Copy Report</button>
 
 <script>
-const API_URL = "https://script.google.com/macros/s/AKfycbzbOWDOUr4Vk5bvyL3VG_BCPr2slVOrLeivM1JlwY_tuUzBzD6JG_q4cODycuLrZ1MQ/exec";
+function loadChoirGroups() {
+  const stored = localStorage.getItem("choirGroups");
+  if (stored) return JSON.parse(stored);
+  return {
+    Tenor: ["Muange","Victor","Kennah","Paul","Agao","Karani","Derrick","N"],
+    Alto: ["Eliza","Faith","Fiona","Hellen","Vero","Milah","Irine","Alivitsa","Mwende","Eva"],
+    SOP: ["Gloria","Catherine","Monica","Kajuju","Mourine","Gabby","Liz","Mary","Neema","Lydia","Tess","Lavenda"],
+    Bass: ["Pk","Bryson","Johnpaul","Ken","Sospeter","Victor","Robin","Franklin"]
+  };
+}
 
 const today = new Date().toISOString().split("T")[0];
 document.getElementById("todayDate").textContent = today;
 
-let choirGroups = {};
+const choirGroups = loadChoirGroups();
+const container = document.getElementById("attendance-container");
+let globalIndex = 1;
 
-// Fetch members from Google Sheets
-async function loadChoirGroupsOnline() {
-  try {
-    const res = await fetch(API_URL + "?action=members");
-    const data = await res.json(); // expects { Tenor: [...], Alto: [...], ... }
-    choirGroups = data;
-  } catch (err) {
-    console.warn("Could not load online members, using local default:", err);
-    choirGroups = {
-      Tenor: ["Muange","Victor","Kennah","Paul","Agao","Karani","Derrick","N"],
-      Alto: ["Eliza","Faith","Fiona","Hellen","Vero","Milah","Irine","Alivitsa","Mwende","Eva"],
-      SOP: ["Gloria","Catherine","Monica","Kajuju","Mourine","Gabby","Liz","Mary","Neema","Lydia","Tess","Lavenda"],
-      Bass: ["Pk","Bryson","Johnpaul","Ken","Sospeter","Victor","Robin","Franklin"]
-    };
-  }
-  buildAttendanceTable();
+for (const [section, members] of Object.entries(choirGroups)) {
+  const h2 = document.createElement("h2");
+  h2.textContent = section;
+  container.appendChild(h2);
+
+  const table = document.createElement("table");
+  table.innerHTML = `
+    <thead><tr><th>Name</th><th>Present</th><th>Apology</th></tr></thead>
+    <tbody></tbody>`;
+  const tbody = table.querySelector("tbody");
+
+  members.forEach(name => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${globalIndex}. ${name}</td>
+      <td><input type="checkbox" id="present-${globalIndex}" onchange="toggleCheck(${globalIndex}, 'present')"></td>
+      <td><input type="checkbox" id="apology-${globalIndex}" onchange="toggleCheck(${globalIndex}, 'apology')"></td>`;
+    tbody.appendChild(row);
+    globalIndex++;
+  });
+
+  container.appendChild(table);
 }
 
-// Build the attendance table dynamically
-function buildAttendanceTable() {
-  const container = document.getElementById("attendance-container");
-  container.innerHTML = "";
-  let globalIndex = 1;
-
-  for (const [section, members] of Object.entries(choirGroups)) {
-    const h2 = document.createElement("h2");
-    h2.textContent = section;
-    container.appendChild(h2);
-
-    const table = document.createElement("table");
-    table.innerHTML = `
-      <thead><tr><th>Name</th><th>Present</th><th>Apology</th></tr></thead>
-      <tbody></tbody>`;
-    const tbody = table.querySelector("tbody");
-
-    members.forEach(name => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${globalIndex}. ${name}</td>
-        <td><input type="checkbox" id="present-${globalIndex}" onchange="toggleCheck(${globalIndex}, 'present')"></td>
-        <td><input type="checkbox" id="apology-${globalIndex}" onchange="toggleCheck(${globalIndex}, 'apology')"></td>`;
-      tbody.appendChild(row);
-      globalIndex++;
-    });
-
-    container.appendChild(table);
-  }
-}
-
-// Toggle checkboxes so only one status can be checked
 function toggleCheck(i, type) {
   if (type === 'present')
     document.getElementById(`apology-${i}`).checked = false;
@@ -120,11 +105,7 @@ function toggleCheck(i, type) {
     document.getElementById(`present-${i}`).checked = false;
 }
 
-// Generate the report and save to Google Sheets
-async function generateReport() {
-  const generateBtn = document.getElementById("generateBtn");
-  generateBtn.disabled = true;
-
+function generateReport() {
   let report = `Choir Attendance (${today})\n`;
   let totalIndex = 1;
   let apologyList = [];
@@ -141,7 +122,7 @@ async function generateReport() {
       if (present) status = "present";
       else if (apology) status = "apology";
 
-      attendanceData.push({ date: today, section, name, status });
+      attendanceData.push({ section, name, status });
 
       if (status === "present") {
         report += `${sectionCount}. ${name}\n`;
@@ -159,11 +140,9 @@ async function generateReport() {
   document.getElementById("report").textContent = report;
   document.getElementById("copyBtn").style.display = "block";
 
-  await saveAttendance(attendanceData);
-  generateBtn.disabled = false;
+  saveAttendance(today, attendanceData); // ✅ Automatically save when generating
 }
 
-// Copy report to clipboard
 function copyReport() {
   const text = document.getElementById("report").textContent;
   const btn = document.getElementById("copyBtn");
@@ -172,7 +151,9 @@ function copyReport() {
     navigator.clipboard.writeText(text).then(() => {
       btn.textContent = "✅ Copied!";
       setTimeout(() => btn.textContent = "📋 Copy Report", 2000);
-    }).catch(err => alert("Clipboard error: " + err));
+    }).catch(err => {
+      alert("Clipboard error: " + err);
+    });
   } else {
     const textarea = document.createElement("textarea");
     textarea.value = text;
@@ -180,29 +161,21 @@ function copyReport() {
     textarea.select();
     document.execCommand("copy");
     document.body.removeChild(textarea);
+
     btn.textContent = "✅ Copied!";
     setTimeout(() => btn.textContent = "📋 Copy Report", 2000);
   }
 }
 
-// Save attendance to Google Sheets
-async function saveAttendance(records) {
-  try {
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "attendance", records })
-    });
-    const result = await res.json();
-    console.log("Saved to Google Sheets:", result);
-  } catch (err) {
-    console.error("Error saving attendance:", err);
-    alert("Failed to save attendance. Check console.");
-  }
+async function saveAttendance(date, records) {
+  const res = await fetch("https://script.google.com/macros/s/AKfycbzbOWDOUr4Vk5bvyL3VG_BCPr2slVOrLeivM1JlwY_tuUzBzD6JG_q4cODycuLrZ1MQ/exec", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(records)
+  });
+  const result = await res.json();
+  console.log("Saved to Google Sheets:", result);
 }
-
-// Initialize the page
-loadChoirGroupsOnline();
 </script>
 </body>
 </html>
