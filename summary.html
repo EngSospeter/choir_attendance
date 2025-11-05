@@ -47,37 +47,53 @@
 <div id="summary"></div>
 
 <script>
+const API_URL = "https://script.google.com/macros/s/AKfycbzbOWDOUr4Vk5bvyL3VG_BCPr2slVOrLeivM1JlwY_tuUzBzD6JG_q4cODycuLrZ1MQ/exec";
+
 function loadChoirGroups() {
   const stored = localStorage.getItem("choirGroups");
-  return stored ? JSON.parse(stored) : {};
+  return stored ? JSON.parse(stored) : {
+    Tenor: ["Muange","Victor","Kennah","Paul","Agao","Karani","Derrick","N"],
+    Alto: ["Eliza","Faith","Fiona","Hellen","Vero","Milah","Irine","Alivitsa","Mwende","Eva"],
+    SOP: ["Gloria","Catherine","Monica","Kajuju","Mourine","Gabby","Liz","Mary","Neema","Lydia","Tess","Lavenda"],
+    Bass: ["Pk","Bryson","Johnpaul","Ken","Sospeter","Victor","Robin","Franklin"]
+  };
 }
 
-function generateSummary() {
+async function loadAttendance() {
+  try {
+    const res = await fetch(API_URL);
+    const data = await res.json();
+    return data; // array of {date, section, name, status}
+  } catch (err) {
+    console.error("Error fetching attendance:", err);
+    return [];
+  }
+}
+
+async function generateSummary() {
   const start = document.getElementById("startDate").value;
   const end = document.getElementById("endDate").value;
   if (!start || !end) return alert("Select both dates!");
 
-  const records = JSON.parse(localStorage.getItem("attendanceRecords") || "[]");
-  const choirGroups = loadChoirGroups();
-  const filtered = records.filter(r => r.date >= start && r.date <= end);
+  const records = await loadAttendance();
 
+  const filtered = records.filter(r => r.date >= start && r.date <= end);
   if (filtered.length === 0) {
     document.getElementById("summary").innerHTML = "<p>No records found in this range.</p>";
     return;
   }
 
+  const choirGroups = loadChoirGroups();
   const summaryData = {};
   for (const [section, members] of Object.entries(choirGroups)) {
     summaryData[section] = {};
     members.forEach(name => summaryData[section][name] = {present:0, apology:0, absent:0});
   }
 
-  filtered.forEach(day => {
-    day.records.forEach(r => {
-      if (summaryData[r.section]?.[r.name]) {
-        summaryData[r.section][r.name][r.status]++;
-      }
-    });
+  filtered.forEach(r => {
+    if(summaryData[r.section]?.[r.name]) {
+      summaryData[r.section][r.name][r.status]++;
+    }
   });
 
   let html = `<p><strong>Period:</strong> ${start} → ${end}</p>`;
@@ -96,5 +112,6 @@ function generateSummary() {
   document.getElementById("summary").innerHTML = html;
 }
 </script>
+
 </body>
 </html>

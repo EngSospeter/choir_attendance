@@ -11,29 +11,13 @@
     navigator.serviceWorker.register('/service-worker.js');
   }
 </script>
-
 <title>Edit Choir Members</title>
 <style>
-  body {
-    font-family: 'Segoe UI', sans-serif;
-    background: #f7fafc;
-    padding: 15px;
-  }
+  body { font-family: 'Segoe UI', sans-serif; background: #f7fafc; padding: 15px; }
   h1 { text-align: center; color: #0b5ed7; }
-  .section {
-    background: #fff; padding: 10px;
-    margin: 10px 0; border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  }
-  input[type="text"] {
-    width: 60%; padding: 5px;
-    border: 1px solid #ccc; border-radius: 4px;
-  }
-  button {
-    background: #0b5ed7; color: white;
-    border: none; padding: 5px 10px;
-    border-radius: 4px; margin: 2px;
-  }
+  .section { background: #fff; padding: 10px; margin: 10px 0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  input[type="text"] { width: 60%; padding: 5px; border: 1px solid #ccc; border-radius: 4px; }
+  button { background: #0b5ed7; color: white; border: none; padding: 5px 10px; border-radius: 4px; margin: 2px; }
   button:hover { background: #084298; }
   ul { list-style: none; padding: 0; }
   li { margin: 4px 0; }
@@ -50,66 +34,84 @@
 </div>
 
 <script>
-function loadChoirGroups() {
-  const stored = localStorage.getItem("choirGroups");
-  if (stored) return JSON.parse(stored);
-  return {
-    Tenor: ["Muange","Victor","Kennah","Paul","Agao","Karani","Derrick","N"],
-    Alto: ["Eliza","Faith","Fiona","Hellen","Vero","Milah","Irine","Alivitsa","Mwende","Eva"],
-    SOP: ["Gloria","Catherine","Monica","Kajuju","Mourine","Gabby","Liz","Mary","Neema","Lydia","Tess","Lavenda"],
-    Bass: ["Pk","Bryson","Johnpaul","Ken","Sospeter","Victor","Robin","Franklin"]
-  };
+const API_URL = "https://script.google.com/macros/s/AKfycbzbOWDOUr4Vk5bvyL3VG_BCPr2slVOrLeivM1JlwY_tuUzBzD6JG_q4cODycuLrZ1MQ/exec";
+
+let choirGroups = {};
+
+// Load members from Google Sheets
+async function loadChoirGroupsOnline() {
+  try {
+    const res = await fetch(API_URL + "?action=members");
+    choirGroups = await res.json();
+  } catch (err) {
+    console.warn("Could not load online members, using fallback:", err);
+    choirGroups = {
+      Tenor: ["Muange","Victor","Kennah","Paul","Agao","Karani","Derrick","N"],
+      Alto: ["Eliza","Faith","Fiona","Hellen","Vero","Milah","Irine","Alivitsa","Mwende","Eva"],
+      SOP: ["Gloria","Catherine","Monica","Kajuju","Mourine","Gabby","Liz","Mary","Neema","Lydia","Tess","Lavenda"],
+      Bass: ["Pk","Bryson","Johnpaul","Ken","Sospeter","Victor","Robin","Franklin"]
+    };
+  }
+  buildEditor();
 }
 
-let choirGroups = loadChoirGroups();
-const editor = document.getElementById("editor");
+// Build the editing interface
+function buildEditor() {
+  const editor = document.getElementById("editor");
+  editor.innerHTML = "";
 
-for (const [section, members] of Object.entries(choirGroups)) {
-  const div = document.createElement("div");
-  div.className = "section";
-  div.innerHTML = `<h2>${section}</h2><ul id="list-${section}"></ul>
-    <input type="text" id="new-${section}" placeholder="New member name">
-    <button onclick="addMember('${section}')">Add</button>`;
-  editor.appendChild(div);
+  for (const [section, members] of Object.entries(choirGroups)) {
+    const div = document.createElement("div");
+    div.className = "section";
+    div.innerHTML = `<h2>${section}</h2><ul id="list-${section}"></ul>
+      <input type="text" id="new-${section}" placeholder="New member name">
+      <button onclick="addMember('${section}')">Add</button>`;
+    editor.appendChild(div);
 
-  const ul = div.querySelector("ul");
-  members.forEach((name, index) => {
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <input type="text" value="${name}" id="${section}-${index}">
-      <button onclick="deleteMember('${section}', ${index})">🗑️</button>`;
-    ul.appendChild(li);
-  });
+    const ul = div.querySelector("ul");
+    members.forEach((name, index) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<input type="text" value="${name}" id="${section}-${index}">
+        <button onclick="deleteMember('${section}', ${index})">🗑️</button>`;
+      ul.appendChild(li);
+    });
+  }
 }
 
+// Add new member to section
 function addMember(section) {
   const input = document.getElementById(`new-${section}`);
   const name = input.value.trim();
   if (!name) return alert("Enter a name!");
   choirGroups[section].push(name);
   input.value = "";
-  rebuild();
+  buildEditor();
 }
 
+// Delete a member from section
 function deleteMember(section, index) {
   choirGroups[section].splice(index, 1);
-  rebuild();
+  buildEditor();
 }
 
-function rebuild() {
-  localStorage.setItem("choirGroups", JSON.stringify(choirGroups));
-  location.reload();
-}
-
-function saveChanges() {
-  for (const [section, members] of Object.entries(choirGroups)) {
-    choirGroups[section] = [];
-    const listItems = document.querySelectorAll(`#list-${section} input[type=text]`);
-    listItems.forEach(inp => choirGroups[section].push(inp.value.trim()).filter(Boolean));
+// Save all changes to Google Sheets
+async function saveChanges() {
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "update_members", data: choirGroups })
+    });
+    const result = await res.json();
+    alert("✅ Changes saved online!");
+    console.log("Saved members:", result);
+  } catch (err) {
+    alert("Error saving members: " + err);
+    console.error(err);
   }
-  localStorage.setItem("choirGroups", JSON.stringify(choirGroups));
-  alert("✅ Changes saved!");
 }
+
+loadChoirGroupsOnline();
 </script>
 </body>
 </html>
